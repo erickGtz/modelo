@@ -3,10 +3,9 @@ import pandas as pd
 import json
 import numpy as np
 import plotly.express as px # Usaremos Plotly para gráficas interactivas
-import matplotlib.pyplot as plt # Mantenemos Matplotlib/Seaborn para Correlación
-import seaborn as sns
+import matplotlib.pyplot as plt # ¡AÑADIDO! Necesario para la gráfica de Seaborn/Correlación
+import seaborn as sns 
 
-# Importamos la función de predicción del modelo (Asegúrate que el nombre del archivo sea correcto)
 from modelo import hacer_prediccion 
 
 st.set_page_config(page_title="Predicción de Riesgo de Defectos", layout="wide")
@@ -83,7 +82,7 @@ if generar:
         )
         
         st.info(f"""
-            **Métricas de Regresión Múltiple**
+            **Métricas de Regresión Múltiple (Final)**
             - **R² (Poder Explicativo):** `{metrics.get('R2')}` (El modelo explica el {metrics.get('R2') * 100:.1f}% de la varianza.)
             - **RMSE (Error Promedio):** `{metrics.get('RMSE')} defectos` (Precisión del modelo.)
             - **MAE (Error Absoluto):** `{metrics.get('MAE')} defectos`
@@ -91,7 +90,7 @@ if generar:
 
 
     # ---------------------------------------------------------
-    # COLUMNA 2 (Superior Derecha): Curva de Riesgo (AHORA CON PLOTLY)
+    # COLUMNA 2 (Superior Derecha): Curva de Riesgo (Plotly)
     # ---------------------------------------------------------
     with col2:
         st.markdown("### 3. Curva de Riesgo Semanal (Rayleigh)")
@@ -104,16 +103,16 @@ if generar:
                 y='Defectos', 
                 title=f"Distribución de Riesgo de Defectos en {semanas} Semanas",
                 markers=True,
-                color_discrete_sequence=['#FF4B4B'] # Color rojo Streamlit
+                color_discrete_sequence=['#FF4B4B']
             )
             
             fig.update_layout(
                 xaxis_title="Semana del Proyecto", 
                 yaxis_title="Defectos Esperados",
-                hovermode="x unified" # Muestra información más limpia al pasar el mouse
+                hovermode="x unified"
             )
             
-            st.plotly_chart(fig, use_container_width=True) # Mostrar gráfica Plotly
+            st.plotly_chart(fig, use_container_width=True)
             
             max_defectos = df_curva['Defectos'].max()
             semanas_pico = df_curva[df_curva['Defectos'] == max_defectos]['Semana'].tolist()
@@ -143,8 +142,23 @@ if generar:
         df_corr = corr_series.reset_index()
         df_corr.columns = ['Variable', 'Correlación (r)']
         
-        st.dataframe(df_corr.sort_values(by='Correlación (r)', ascending=False).set_index('Variable'), use_container_width=True)
-        st.caption("La correlación alta de Costo_Defectos confirma la fuerte relación entre costo y defectos.")
+        # Usamos Matplotlib/Seaborn para la gráfica de barras de correlación
+        fig_corr, ax_corr = plt.subplots(figsize=(10, 5))
+        
+        # Eliminar Total_Defectos (correlación 1.0)
+        corr_display = corr_series.drop('Total_Defectos').sort_values(ascending=False) 
+        
+        sns.barplot(x=corr_display.index, y=corr_display.values, palette="viridis", ax=ax_corr)
+        ax_corr.set_title('Correlación de Variables con Total_Defectos', fontsize=14)
+        ax_corr.set_xlabel('Variable Predictora', fontsize=12)
+        ax_corr.set_ylabel('Coeficiente de Correlación (r)', fontsize=12)
+        ax_corr.set_ylim(-1, 1)
+        ax_corr.tick_params(axis='x', rotation=45)
+        ax_corr.grid(axis='y', linestyle='--', alpha=0.6)
+        plt.tight_layout()
+        
+        st.pyplot(fig_corr)
+        st.caption("Gráfico que muestra la relación lineal de cada variable con el número total de defectos.")
 
 
 # Pie de página descriptivo
