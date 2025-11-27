@@ -170,7 +170,7 @@ else:
                         df_curva, 
                         x='Semana', 
                         y='Defectos', 
-                        title=f"Distribución de Riesgo de Defectos en {semanas} Semanas",
+                        title=f"Distribución de Defectos en {semanas} Semanas",
                         markers=True,
                         color_discrete_sequence=['#FF4B4B']
                     )
