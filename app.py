@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 import json
 import numpy as np
-# CAMBIO CLAVE: Usamos la librería base Plotly GO (más robusta)
-import plotly.graph_objects as go 
+# USANDO SOLO PLOTLY EXPRESS (PX)
+import plotly.express as px 
 
 # Importamos la función de predicción del modelo (Asegúrate que el nombre del archivo sea correcto)
 from modelo import hacer_prediccion 
@@ -94,27 +94,24 @@ if generar:
 
 
     # ---------------------------------------------------------
-    # COLUMNA 2 (Superior Derecha): Curva de Riesgo (Plotly GO)
+    # COLUMNA 2 (Superior Derecha): Curva de Riesgo (Plotly Express)
     # ---------------------------------------------------------
     with col2:
         st.markdown("### 3. Curva de Riesgo Semanal (Rayleigh)")
         
         if not df_curva.empty:
             
-            # Usando Plotly.graph_objects (go) para la línea interactiva
-            fig = go.Figure(data=[
-                go.Scatter(
-                    x=df_curva['Semana'], 
-                    y=df_curva['Defectos'], 
-                    mode='lines+markers',
-                    name='Defectos Esperados',
-                    line=dict(color='#FF4B4B', width=3),
-                    marker=dict(size=8)
-                )
-            ])
+            # Usando Plotly Express (px) para la curva (Punto 3)
+            fig = px.line(
+                df_curva, 
+                x='Semana', 
+                y='Defectos', 
+                title=f"Distribución de Riesgo de Defectos en {semanas} Semanas",
+                markers=True,
+                color_discrete_sequence=['#FF4B4B']
+            )
             
             fig.update_layout(
-                title=f"Distribución de Riesgo de Defectos en {semanas} Semanas",
                 xaxis_title="Semana del Proyecto", 
                 yaxis_title="Defectos Esperados",
                 hovermode="x unified"
@@ -141,7 +138,7 @@ if generar:
         st.caption("Estos valores sumados dan el Total de Defectos Estimados.")
         
     # ---------------------------------------------------------
-    # COLUMNA 4 (Inferior Derecha): Correlación (AHORA ES TABLA SIMPLE)
+    # COLUMNA 4 (Inferior Derecha): Correlación (PLOTLY EXPRESS - BARRAS)
     # ---------------------------------------------------------
     with col4:
         st.markdown("### 5. Trazabilidad: Correlación con Defectos")
@@ -150,15 +147,27 @@ if generar:
         df_corr = corr_series.reset_index()
         df_corr.columns = ['Variable', 'Correlación (r)']
         
-        # Eliminar Total_Defectos y formatear
-        df_corr = df_corr[df_corr['Variable'] != 'Total_Defectos']
+        # Eliminar Total_Defectos (1.0) y ordenar
+        df_corr_plot = df_corr[df_corr['Variable'] != 'Total_Defectos'].sort_values(by='Correlación (r)', ascending=False)
         
-        # Formatear la tabla para la presentación (sin usar applymap)
-        df_corr['Correlación (r)'] = df_corr['Correlación (r)'].map(lambda x: '{:.4f}'.format(x) if isinstance(x, (int, float)) else str(x))
-        df_corr = df_corr.sort_values(by='Correlación (r)', ascending=False)
+        # Crear la gráfica de barras interactiva con Plotly Express (Punto 5)
+        fig_corr = px.bar(
+            df_corr_plot,
+            x='Variable',
+            y='Correlación (r)',
+            title='Fuerza de la Correlación con el Total de Defectos',
+            color='Correlación (r)', # Colorear por el valor de correlación
+            color_continuous_scale=px.colors.sequential.Viridis,
+            range_y=[-1, 1]
+        )
         
-        # Mostrar como DataFrame simple (sin estilos ni errores)
-        st.dataframe(df_corr.set_index('Variable'), use_container_width=True)
+        fig_corr.update_layout(
+            xaxis_title="Variable Predictora",
+            yaxis_title="Coeficiente de Correlación (r)",
+            xaxis={'categoryorder':'total descending'}
+        )
+        
+        st.plotly_chart(fig_corr, use_container_width=True)
         st.caption("Valores más cercanos a 1.0 o -1.0 indican el predictor más fuerte.")
 
 
