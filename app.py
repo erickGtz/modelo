@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 import json
 import numpy as np
-# CAMBIO CLAVE: Usamos la librería base Plotly GO (más robusta)
-import plotly.graph_objects as go 
+# Usaremos solo Plotly Express (px)
+import plotly.express as px 
 import matplotlib.pyplot as plt 
 import seaborn as sns 
 
@@ -12,7 +12,7 @@ from modelo import hacer_prediccion
 
 st.set_page_config(page_title="Predicción de Riesgo de Defectos", layout="wide")
 
-st.title("Panel de Predicción de Riesgo de Defectos")
+st.title("🛡️ Panel de Predicción de Riesgo de Defectos")
 
 # ---------------------------------------------------------
 # FORMULARIO (Estático y en la página principal)
@@ -70,6 +70,10 @@ if generar:
     except Exception:
         st.error("Error al procesar el JSON de salida del modelo. Revise la consola del script `modelo_produccion.py`.")
         st.stop()
+
+    
+    st.markdown("## Resultados y Trazabilidad") # Título movido aquí (después del formulario)
+
     # ---------------------------------------------------------
     # COLUMNA 1 (Superior Izquierda): KPIs y Métricas
     # ---------------------------------------------------------
@@ -91,27 +95,24 @@ if generar:
 
 
     # ---------------------------------------------------------
-    # COLUMNA 2 (Superior Derecha): Curva de Riesgo (Plotly GO)
+    # COLUMNA 2 (Superior Derecha): Curva de Riesgo (Plotly Express)
     # ---------------------------------------------------------
     with col2:
         st.markdown("### 3. Curva de Riesgo Semanal (Rayleigh)")
         
         if not df_curva.empty:
             
-            # Usando Plotly.graph_objects (go) para la línea interactiva
-            fig = go.Figure(data=[
-                go.Scatter(
-                    x=df_curva['Semana'], 
-                    y=df_curva['Defectos'], 
-                    mode='lines+markers',
-                    name='Defectos Esperados',
-                    line=dict(color='#FF4B4B', width=3),
-                    marker=dict(size=8)
-                )
-            ])
+            # Usando Plotly Express (px) - Curva Interactiva Simple
+            fig = px.line(
+                df_curva, 
+                x='Semana', 
+                y='Defectos', 
+                title=f"Distribución de Riesgo de Defectos en {semanas} Semanas",
+                markers=True,
+                color_discrete_sequence=['#FF4B4B']
+            )
             
             fig.update_layout(
-                title=f"Distribución de Riesgo de Defectos en {semanas} Semanas",
                 xaxis_title="Semana del Proyecto", 
                 yaxis_title="Defectos Esperados",
                 hovermode="x unified"
@@ -138,7 +139,7 @@ if generar:
         st.caption("Estos valores sumados dan el Total de Defectos Estimados.")
         
     # ---------------------------------------------------------
-    # COLUMNA 4 (Inferior Derecha): Correlación (AHORA ES TABLA SIMPLE)
+    # COLUMNA 4 (Inferior Derecha): Correlación (TABLA SIMPLE)
     # ---------------------------------------------------------
     with col4:
         st.markdown("### 5. Trazabilidad: Correlación con Defectos")
@@ -150,14 +151,16 @@ if generar:
         # Eliminar Total_Defectos y formatear
         df_corr = df_corr[df_corr['Variable'] != 'Total_Defectos']
         
-        # Formatear a 4 decimales y ordenar
-        df_corr['Correlación (r)'] = df_corr['Correlación (r)'].map('{:.4f}'.format)
+        # Formatear la tabla para la presentación
+        # Usamos el formateo de string simple aquí
+        df_corr['Correlación (r)'] = df_corr['Correlación (r)'].map(lambda x: '{:.4f}'.format(x) if isinstance(x, (int, float)) else str(x))
         df_corr = df_corr.sort_values(by='Correlación (r)', ascending=False)
         
-        # Simplemente mostrar la tabla, sin estilos de color
+        # Mostrar como DataFrame simple (sin estilos ni errores)
         st.dataframe(df_corr.set_index('Variable'), use_container_width=True)
-        st.caption("La Correlación (r) muestra la fuerza de la relación con el Total de Defectos.")
+        st.caption("Valores más cercanos a 1.0 o -1.0 indican el predictor más fuerte.")
 
 
 # Pie de página descriptivo
 st.markdown("---")
+st.caption("Script de predicción ejecutado desde `modelo_produccion.py`.")
