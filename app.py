@@ -3,6 +3,7 @@ import pandas as pd
 import json
 import numpy as np
 import plotly.express as px # Usamos Plotly Express
+import matplotlib.pyplot as plt 
 import seaborn as sns 
 
 # Importamos la función de predicción del modelo (Asegúrate que el nombre del archivo sea correcto)
@@ -10,30 +11,41 @@ from modelo import hacer_prediccion
 
 st.set_page_config(page_title="Predicción de Riesgo de Defectos", layout="wide")
 
-st.title("🛡️ Panel de Predicción de Riesgo de Defectos")
+st.title("Panel de Predicción de Riesgo de Defectos")
 
 # ---------------------------------------------------------
 # FORMULARIO (Estático y en la página principal)
 # ---------------------------------------------------------
-st.header("🛠️ Parámetros del Nuevo Proyecto")
+st.header("Parámetros del Nuevo Proyecto")
 st.markdown("Introduce las estimaciones clave para el nuevo proyecto.")
 
-with st.form("form_prediccion", clear_on_submit=False):
+# El formulario ya no es un 'with st.form' completo para permitir que los inputs dinámicos funcionen sin generar un rerun
+# Mantenemos el bloque de validación de formulario para generar el evento 'generar'
+with st.form("form_prediccion_main", clear_on_submit=False):
     # Usamos columnas para un layout más limpio en el cuerpo principal
     col_form1, col_form2, col_form3 = st.columns(3)
     
     with col_form1:
-        # Predictor 1 (Tamaño)
-        tareas = st.number_input("1. Tareas Totales Estimadas:", min_value=1, value=35)
+        # Predictor 1 (Tamaño) - Clave para la validación de Max Value
+        tareas = st.number_input("1. Tareas Totales Estimadas:", min_value=1, value=35, key="tareas_input")
         
     with col_form2:
         # Predictor 2 (Calidad/Complejidad)
-        automatizacion_input = st.number_input("2. Tareas de Automatización Estimadas:", min_value=0, value=10, 
-                                               help="Número de tareas dedicadas a pruebas automatizadas o CI/CD.")
+        # El valor máximo es ahora el valor de 'tareas'
+        automatizacion_input = st.number_input(
+            "2. Tareas de Automatización Estimadas:", 
+            min_value=0, 
+            # Establecemos el máximo al valor actual de tareas
+            max_value=tareas, 
+            value=min(10, tareas), # Aseguramos que el valor inicial sea <= tareas
+            key="automatizacion_input",
+            help="Número de tareas dedicadas a pruebas automatizadas o CI/CD. No puede exceder las Tareas Totales."
+        )
         
     with col_form3:
         # Input para la Curva Rayleigh (Tiempo)
         semanas = st.number_input("3. Duración del Proyecto (Semanas):", min_value=1, value=12,
+                                  key="semanas_input",
                                   help="Define la duración del eje de tiempo de la curva de riesgo.")
 
     st.markdown("---")
