@@ -1,12 +1,13 @@
 import streamlit as st
-import plotly.express as px 
-import matplotlib.pyplot as plt 
-import seaborn as sns 
 import pandas as pd
 import json
 import numpy as np
+# CAMBIO CLAVE: Usaremos plotly.graph_objects (go) en lugar de plotly.express (px)
+import plotly.graph_objects as go 
+import matplotlib.pyplot as plt 
+import seaborn as sns 
 
-
+# Importamos la función de predicción del modelo (Asegúrate que el nombre del archivo sea correcto)
 from modelo import hacer_prediccion 
 
 st.set_page_config(page_title="Predicción de Riesgo de Defectos", layout="wide")
@@ -70,6 +71,9 @@ if generar:
         st.error("Error al procesar el JSON de salida del modelo. Revise la consola del script `modelo_produccion.py`.")
         st.stop()
 
+    
+    st.markdown("## Resultados y Trazabilidad") # Título movido aquí (después del formulario)
+
     # ---------------------------------------------------------
     # COLUMNA 1 (Superior Izquierda): KPIs y Métricas
     # ---------------------------------------------------------
@@ -91,23 +95,27 @@ if generar:
 
 
     # ---------------------------------------------------------
-    # COLUMNA 2 (Superior Derecha): Curva de Riesgo (Plotly)
+    # COLUMNA 2 (Superior Derecha): Curva de Riesgo (Plotly GO)
     # ---------------------------------------------------------
     with col2:
         st.markdown("### 3. Curva de Riesgo Semanal (Rayleigh)")
         
         if not df_curva.empty:
-            # Crear la gráfica interactiva con Plotly Express
-            fig = px.line(
-                df_curva, 
-                x='Semana', 
-                y='Defectos', 
-                title=f"Distribución de Riesgo de Defectos en {semanas} Semanas",
-                markers=True,
-                color_discrete_sequence=['#FF4B4B']
-            )
+            
+            # CAMBIO CLAVE: Usamos plotly.graph_objects (go) para la línea
+            fig = go.Figure(data=[
+                go.Scatter(
+                    x=df_curva['Semana'], 
+                    y=df_curva['Defectos'], 
+                    mode='lines+markers',
+                    name='Defectos Esperados',
+                    line=dict(color='#FF4B4B', width=3),
+                    marker=dict(size=8)
+                )
+            ])
             
             fig.update_layout(
+                title=f"Distribución de Riesgo de Defectos en {semanas} Semanas",
                 xaxis_title="Semana del Proyecto", 
                 yaxis_title="Defectos Esperados",
                 hovermode="x unified"
@@ -164,3 +172,4 @@ if generar:
 
 # Pie de página descriptivo
 st.markdown("---")
+st.caption("Script de predicción ejecutado desde `modelo_produccion.py`.")
