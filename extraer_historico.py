@@ -5,7 +5,7 @@ def obtener_dataset_proyectos():
     conn = mysql.connector.connect(
         host="localhost",
         user="root",
-        password="13mysql22",
+        password="",
         database="db_soporte"
     )
     cursor = conn.cursor(dictionary=True)

@@ -1,52 +1,151 @@
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 import json
+import numpy as np
+import plotly.express as px # Usaremos Plotly para gráficas interactivas
+import matplotlib.pyplot as plt # Mantenemos Matplotlib/Seaborn para Correlación
+import seaborn as sns
 
-from modelo_rayleigh import predecir_riesgo_defecto  
+# Importamos la función de predicción del modelo (Asegúrate que el nombre del archivo sea correcto)
+from modelo import hacer_prediccion 
 
-st.set_page_config(page_title="Predicción de Riesgo de Defectos", layout="centered")
+st.set_page_config(page_title="Predicción de Riesgo de Defectos", layout="wide")
 
-st.title("Predicción de Riesgo de Defectos en Proyectos")
-st.write("Completa el formulario para generar la predicción usando el modelo de Regresión + Rayleigh.")
+st.title("🛡️ Panel de Predicción de Riesgo de Defectos")
 
 # ---------------------------------------------------------
-# FORMULARIO
+# FORMULARIO (Estático y en la página principal)
 # ---------------------------------------------------------
-with st.form("form_prediccion"):
-    tareas = st.number_input("Número estimado de tareas del nuevo proyecto:", min_value=1, value=30)
-    semanas = st.number_input("Duración estimada del proyecto (semanas):", min_value=1, value=10)
+st.header("🛠️ Parámetros del Nuevo Proyecto")
+st.markdown("Introduce las estimaciones clave para el nuevo proyecto.")
 
-    generar = st.form_submit_button("🔎 Generar Predicción")
+with st.form("form_prediccion", clear_on_submit=False):
+    # Usamos columnas para un layout más limpio en el cuerpo principal
+    col_form1, col_form2, col_form3 = st.columns(3)
+    
+    with col_form1:
+        # Predictor 1 (Tamaño)
+        tareas = st.number_input("1. Tareas Totales Estimadas:", min_value=1, value=35)
+        
+    with col_form2:
+        # Predictor 2 (Calidad/Complejidad)
+        automatizacion_input = st.number_input("2. Tareas de Automatización Estimadas:", min_value=0, value=10, 
+                                               help="Número de tareas dedicadas a pruebas automatizadas o CI/CD.")
+        
+    with col_form3:
+        # Input para la Curva Rayleigh (Tiempo)
+        semanas = st.number_input("3. Duración del Proyecto (Semanas):", min_value=1, value=12,
+                                  help="Define la duración del eje de tiempo de la curva de riesgo.")
+
+    st.markdown("---")
+    # Botón de submit del formulario
+    generar = st.form_submit_button("🔎 Generar Predicción y Análisis", type="primary")
+
+# Contenedores para el resultado
+col1, col2 = st.columns(2)
+col3, col4 = st.columns(2)
 
 # ---------------------------------------------------------
 # PROCESAR PREDICCIÓN
 # ---------------------------------------------------------
 if generar:
-    st.subheader("📊 Resultado del Modelo")
-
-    # Ejecutar tu función principal
-    prediccion_json_str = predecir_riesgo_defecto(tareas, semanas)
-
-    # Mostrar JSON
-    st.code(prediccion_json_str, language="json")
-
-    # Convertir JSON a DataFrame para gráfica
+    
+    # 1. Ejecutar el modelo
+    try:
+        prediccion_json_str = hacer_prediccion(tareas, automatizacion_input, semanas)
+        
+    except Exception as e:
+        st.error(f"Error al ejecutar el modelo o conectarse a la DB: {e}")
+        st.stop()
+        
+    # 2. Cargar y procesar JSON
     try:
         resultado = json.loads(prediccion_json_str)
         df_curva = pd.DataFrame(resultado.get('Curva_Riesgo_Rayleigh', []))
+        total_defectos = resultado.get('Total_Defectos_Estimados', 0)
+        metrics = resultado.get('Regresion_Metrics_Final', {})
+        corr_data = resultado.get('Correlacion_Defectos', {})
 
+    except Exception:
+        st.error("Error al procesar el JSON de salida del modelo. Revise la consola del script `modelo_produccion.py`.")
+        st.stop()
+
+    # ---------------------------------------------------------
+    # COLUMNA 1 (Superior Izquierda): KPIs y Métricas
+    # ---------------------------------------------------------
+    with col1:
+        st.markdown("### 2. Eficacia del Modelo Final")
+        
+        st.metric(
+            label="Total de Defectos Estimados", 
+            value=f"{total_defectos}", 
+            help="Predicción final del Modelo de Regresión Múltiple."
+        )
+        
+        st.info(f"""
+            **Métricas de Regresión Múltiple**
+            - **R² (Poder Explicativo):** `{metrics.get('R2')}` (El modelo explica el {metrics.get('R2') * 100:.1f}% de la varianza.)
+            - **RMSE (Error Promedio):** `{metrics.get('RMSE')} defectos` (Precisión del modelo.)
+            - **MAE (Error Absoluto):** `{metrics.get('MAE')} defectos`
+        """)
+
+
+    # ---------------------------------------------------------
+    # COLUMNA 2 (Superior Derecha): Curva de Riesgo (AHORA CON PLOTLY)
+    # ---------------------------------------------------------
+    with col2:
+        st.markdown("### 3. Curva de Riesgo Semanal (Rayleigh)")
+        
         if not df_curva.empty:
-            st.subheader("📈 Curva de Riesgo (Distribución Rayleigh)")
+            # Crear la gráfica interactiva con Plotly Express
+            fig = px.line(
+                df_curva, 
+                x='Semana', 
+                y='Defectos', 
+                title=f"Distribución de Riesgo de Defectos en {semanas} Semanas",
+                markers=True,
+                color_discrete_sequence=['#FF4B4B'] # Color rojo Streamlit
+            )
             
-            fig, ax = plt.subplots(figsize=(8, 4))
-            ax.plot(df_curva["Semana"], df_curva["Defectos"], marker="o")
-            ax.set_xlabel("Semana del Proyecto")
-            ax.set_ylabel("Defectos Estimados")
-            ax.set_title("Distribución de Riesgo Rayleigh")
-            ax.grid(True)
+            fig.update_layout(
+                xaxis_title="Semana del Proyecto", 
+                yaxis_title="Defectos Esperados",
+                hovermode="x unified" # Muestra información más limpia al pasar el mouse
+            )
+            
+            st.plotly_chart(fig, use_container_width=True) # Mostrar gráfica Plotly
+            
+            max_defectos = df_curva['Defectos'].max()
+            semanas_pico = df_curva[df_curva['Defectos'] == max_defectos]['Semana'].tolist()
+            
+            st.success(f"**Pico de Riesgo:** Mayor número de defectos ({max_defectos}) esperado alrededor de las semanas {semanas_pico[0]} - {semanas_pico[-1]}.")
+            
+        else:
+            st.warning("No hay datos de curva de riesgo para mostrar.")
 
-            st.pyplot(fig)
+    # ---------------------------------------------------------
+    # COLUMNA 3 (Inferior Izquierda): Tabla de Datos de Riesgo
+    # ---------------------------------------------------------
+    with col3:
+        st.markdown("### 4. Detalle Numérico del Riesgo Semanal")
+        # Mostrar la tabla que viene del JSON
+        df_curva.columns = ["Semana", "Defectos Esperados"]
+        st.dataframe(df_curva, use_container_width=True)
+        st.caption("Estos valores sumados dan el Total de Defectos Estimados.")
+        
+    # ---------------------------------------------------------
+    # COLUMNA 4 (Inferior Derecha): Correlación
+    # ---------------------------------------------------------
+    with col4:
+        st.markdown("### 5. Trazabilidad: Correlación con Defectos")
+        
+        corr_series = pd.Series(corr_data)
+        df_corr = corr_series.reset_index()
+        df_corr.columns = ['Variable', 'Correlación (r)']
+        
+        st.dataframe(df_corr.sort_values(by='Correlación (r)', ascending=False).set_index('Variable'), use_container_width=True)
+        st.caption("La correlación alta de Costo_Defectos confirma la fuerte relación entre costo y defectos.")
 
-    except Exception as e:
-        st.error(f"No se pudo generar la gráfica: {e}")
+
+# Pie de página descriptivo
+st.markdown("---")
