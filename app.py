@@ -1,10 +1,11 @@
 import streamlit as st
+import plotly.express as px 
+import matplotlib.pyplot as plt 
+import seaborn as sns 
 import pandas as pd
 import json
 import numpy as np
-import plotly.express as px # Usaremos Plotly para gráficas interactivas
-import matplotlib.pyplot as plt # ¡AÑADIDO! Necesario para la gráfica de Seaborn/Correlación
-import seaborn as sns 
+
 
 from modelo import hacer_prediccion 
 
