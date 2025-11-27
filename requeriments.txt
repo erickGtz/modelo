@@ -3,6 +3,5 @@ pandas
 numpy
 scikit-learn
 mysql-connector-python
-plotly==5.0.0 👈 VERSION ESTABLE
 matplotlib
-seaborn==0.12.2 👈 VERSION ESTABLE
+seaborn

@@ -2,12 +2,10 @@ import streamlit as st
 import pandas as pd
 import json
 import numpy as np
-# CAMBIO CLAVE: Usaremos plotly.graph_objects (go) en lugar de plotly.express (px)
-import plotly.graph_objects as go 
-import matplotlib.pyplot as plt 
-import seaborn as sns 
+import matplotlib.pyplot as plt # Importación Simple
+import seaborn as sns          # Importación Simple
 
-# Importamos la función de predicción del modelo (Asegúrate que el nombre del archivo sea correcto)
+# Importamos la función de predicción del modelo 
 from modelo import hacer_prediccion 
 
 st.set_page_config(page_title="Predicción de Riesgo de Defectos", layout="wide")
@@ -72,7 +70,7 @@ if generar:
         st.stop()
 
     
-    st.markdown("## Resultados y Trazabilidad") # Título movido aquí (después del formulario)
+    st.markdown("## Resultados y Trazabilidad") 
 
     # ---------------------------------------------------------
     # COLUMNA 1 (Superior Izquierda): KPIs y Métricas
@@ -95,33 +93,32 @@ if generar:
 
 
     # ---------------------------------------------------------
-    # COLUMNA 2 (Superior Derecha): Curva de Riesgo (Plotly GO)
+    # COLUMNA 2 (Superior Derecha): Curva de Riesgo (Matplotlib)
     # ---------------------------------------------------------
     with col2:
         st.markdown("### 3. Curva de Riesgo Semanal (Rayleigh)")
         
         if not df_curva.empty:
+            # Usando Matplotlib, que es más estable en entornos básicos
+            fig, ax = plt.subplots(figsize=(10, 5))
             
-            # CAMBIO CLAVE: Usamos plotly.graph_objects (go) para la línea
-            fig = go.Figure(data=[
-                go.Scatter(
-                    x=df_curva['Semana'], 
-                    y=df_curva['Defectos'], 
-                    mode='lines+markers',
-                    name='Defectos Esperados',
-                    line=dict(color='#FF4B4B', width=3),
-                    marker=dict(size=8)
-                )
-            ])
-            
-            fig.update_layout(
-                title=f"Distribución de Riesgo de Defectos en {semanas} Semanas",
-                xaxis_title="Semana del Proyecto", 
-                yaxis_title="Defectos Esperados",
-                hovermode="x unified"
+            sns.lineplot(
+                x='Semana', 
+                y='Defectos', 
+                data=df_curva, 
+                marker='o', 
+                color='#FF4B4B', 
+                linewidth=3, 
+                ax=ax
             )
             
-            st.plotly_chart(fig, use_container_width=True)
+            ax.set_title(f"Distribución de Riesgo de Defectos en {semanas} Semanas", fontsize=14)
+            ax.set_xlabel("Semana del Proyecto", fontsize=12)
+            ax.set_ylabel("Defectos Esperados", fontsize=12)
+            ax.grid(axis='y', linestyle='--', alpha=0.7)
+            ax.set_xticks(df_curva['Semana'][::max(1, int(np.ceil(semanas/6)))]) 
+            
+            st.pyplot(fig)
             
             max_defectos = df_curva['Defectos'].max()
             semanas_pico = df_curva[df_curva['Defectos'] == max_defectos]['Semana'].tolist()
