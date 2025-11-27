@@ -2,6 +2,6 @@ streamlit
 pandas
 numpy
 scikit-learn
-mysql-connector-python
 matplotlib
 seaborn
+mysql-connector-python
