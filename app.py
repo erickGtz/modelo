@@ -2,7 +2,10 @@ import streamlit as st
 import pandas as pd
 import json
 import numpy as np
-import plotly.express as px 
+# CAMBIO CLAVE: Usamos la librería base Plotly GO (más robusta)
+import plotly.graph_objects as go 
+import matplotlib.pyplot as plt 
+import seaborn as sns 
 
 # Importamos la función de predicción del modelo (Asegúrate que el nombre del archivo sea correcto)
 from modelo import hacer_prediccion 
@@ -50,6 +53,7 @@ if generar:
     
     # 1. Ejecutar el modelo
     try:
+        # Nota: El archivo del modelo se llama 'modelo_produccion.py'
         prediccion_json_str = hacer_prediccion(tareas, automatizacion_input, semanas)
         
     except Exception as e:
@@ -92,24 +96,27 @@ if generar:
 
 
     # ---------------------------------------------------------
-    # COLUMNA 2 (Superior Derecha): Curva de Riesgo (Plotly Express)
+    # COLUMNA 2 (Superior Derecha): Curva de Riesgo (Plotly GO)
     # ---------------------------------------------------------
     with col2:
         st.markdown("### 3. Curva de Riesgo Semanal (Rayleigh)")
         
         if not df_curva.empty:
             
-            # Usando Plotly Express (px) - Curva Interactiva Simple
-            fig = px.line(
-                df_curva, 
-                x='Semana', 
-                y='Defectos', 
-                title=f"Distribución de Riesgo de Defectos en {semanas} Semanas",
-                markers=True,
-                color_discrete_sequence=['#FF4B4B']
-            )
+            # Usando Plotly.graph_objects (go) para la línea interactiva
+            fig = go.Figure(data=[
+                go.Scatter(
+                    x=df_curva['Semana'], 
+                    y=df_curva['Defectos'], 
+                    mode='lines+markers',
+                    name='Defectos Esperados',
+                    line=dict(color='#FF4B4B', width=3),
+                    marker=dict(size=8)
+                )
+            ])
             
             fig.update_layout(
+                title=f"Distribución de Riesgo de Defectos en {semanas} Semanas",
                 xaxis_title="Semana del Proyecto", 
                 yaxis_title="Defectos Esperados",
                 hovermode="x unified"
@@ -136,7 +143,7 @@ if generar:
         st.caption("Estos valores sumados dan el Total de Defectos Estimados.")
         
     # ---------------------------------------------------------
-    # COLUMNA 4 (Inferior Derecha): Correlación (TABLA SIMPLE)
+    # COLUMNA 4 (Inferior Derecha): Correlación (AHORA ES TABLA SIMPLE)
     # ---------------------------------------------------------
     with col4:
         st.markdown("### 5. Trazabilidad: Correlación con Defectos")
@@ -148,8 +155,7 @@ if generar:
         # Eliminar Total_Defectos y formatear
         df_corr = df_corr[df_corr['Variable'] != 'Total_Defectos']
         
-        # Formatear la tabla para la presentación
-        # Usamos el formateo de string simple aquí
+        # Formatear la tabla para la presentación (sin usar applymap)
         df_corr['Correlación (r)'] = df_corr['Correlación (r)'].map(lambda x: '{:.4f}'.format(x) if isinstance(x, (int, float)) else str(x))
         df_corr = df_corr.sort_values(by='Correlación (r)', ascending=False)
         
