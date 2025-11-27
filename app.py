@@ -2,10 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import numpy as np
-# Usaremos solo Plotly Express (px)
 import plotly.express as px 
-import matplotlib.pyplot as plt 
-import seaborn as sns 
 
 # Importamos la función de predicción del modelo (Asegúrate que el nombre del archivo sea correcto)
 from modelo import hacer_prediccion 
