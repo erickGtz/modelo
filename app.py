@@ -70,8 +70,6 @@ if generar:
         st.error("Error al procesar el JSON de salida del modelo. Revise la consola del script `modelo_produccion.py`.")
         st.stop()
 
-    
-    st.markdown("## Resultados y Trazabilidad") # Título movido aquí (después del formulario)
 
     # ---------------------------------------------------------
     # COLUMNA 1 (Superior Izquierda): KPIs y Métricas
@@ -161,4 +159,3 @@ if generar:
 
 # Pie de página descriptivo
 st.markdown("---")
-st.caption("Script de predicción ejecutado desde `modelo_produccion.py`.")
