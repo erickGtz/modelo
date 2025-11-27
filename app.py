@@ -4,8 +4,6 @@ import json
 import numpy as np
 # CAMBIO CLAVE: Usamos la librería base Plotly GO (más robusta)
 import plotly.graph_objects as go 
-import matplotlib.pyplot as plt 
-import seaborn as sns 
 
 # Importamos la función de predicción del modelo (Asegúrate que el nombre del archivo sea correcto)
 from modelo import hacer_prediccion 
