@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 import json
 import numpy as np
-# USANDO SOLO PLOTLY EXPRESS (PX)
-import plotly.express as px 
+import plotly.express as px # Usamos Plotly Express
+import seaborn as sns 
 
 # Importamos la función de predicción del modelo (Asegúrate que el nombre del archivo sea correcto)
 from modelo import hacer_prediccion 
@@ -55,7 +55,7 @@ if generar:
         prediccion_json_str = hacer_prediccion(tareas, automatizacion_input, semanas)
         
     except Exception as e:
-        st.error(f"Error al ejecutar el modelo o conectarse a la DB/CSV: {e}")
+        st.error(f"Error al ejecutar el modelo o conectarse a los CSV: {e}")
         st.stop()
         
     # 2. Cargar y procesar JSON
@@ -138,7 +138,7 @@ if generar:
         st.caption("Estos valores sumados dan el Total de Defectos Estimados.")
         
     # ---------------------------------------------------------
-    # COLUMNA 4 (Inferior Derecha): Correlación (PLOTLY EXPRESS - BARRAS)
+    # COLUMNA 4 (Inferior Derecha): Correlación (TABLA SIMPLE)
     # ---------------------------------------------------------
     with col4:
         st.markdown("### 5. Trazabilidad: Correlación con Defectos")
@@ -147,27 +147,15 @@ if generar:
         df_corr = corr_series.reset_index()
         df_corr.columns = ['Variable', 'Correlación (r)']
         
-        # Eliminar Total_Defectos (1.0) y ordenar
-        df_corr_plot = df_corr[df_corr['Variable'] != 'Total_Defectos'].sort_values(by='Correlación (r)', ascending=False)
+        # Eliminar Total_Defectos (1.0) y formatear
+        df_corr = df_corr[df_corr['Variable'] != 'Total_Defectos']
         
-        # Crear la gráfica de barras interactiva con Plotly Express (Punto 5)
-        fig_corr = px.bar(
-            df_corr_plot,
-            x='Variable',
-            y='Correlación (r)',
-            title='Fuerza de la Correlación con el Total de Defectos',
-            color='Correlación (r)', # Colorear por el valor de correlación
-            color_continuous_scale=px.colors.sequential.Viridis,
-            range_y=[-1, 1]
-        )
+        # Formatear la tabla para la presentación (sin usar applymap)
+        df_corr['Correlación (r)'] = df_corr['Correlación (r)'].map(lambda x: '{:.4f}'.format(x) if isinstance(x, (int, float)) else str(x))
+        df_corr = df_corr.sort_values(by='Correlación (r)', ascending=False)
         
-        fig_corr.update_layout(
-            xaxis_title="Variable Predictora",
-            yaxis_title="Coeficiente de Correlación (r)",
-            xaxis={'categoryorder':'total descending'}
-        )
-        
-        st.plotly_chart(fig_corr, use_container_width=True)
+        # Mostrar como DataFrame simple (sin estilos ni errores)
+        st.dataframe(df_corr.set_index('Variable'), use_container_width=True)
         st.caption("Valores más cercanos a 1.0 o -1.0 indican el predictor más fuerte.")
 
 

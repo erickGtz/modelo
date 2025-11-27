@@ -29,7 +29,8 @@ def obtener_totales_proyectos():
         df_tareas = pd.read_csv(CSV_TAREAS)
         
         # --- 1. Calcular Total_Tareas (Antes: PA contar_tareas) ---
-        # CORRECCIÓN: Usamos 'Proyecto_idProyecto' de dw_tareas.csv para agrupar
+        # Contamos el número de filas (tareas) por proyecto
+        # NOTA: Usamos Proyecto_idProyecto de dw_tareas.csv para agrupar
         df_total_tareas = df_tareas.groupby('Proyecto_idProyecto').size().reset_index(name='Total_Tareas')
         df_total_tareas.rename(columns={'Proyecto_idProyecto': 'idProyecto'}, inplace=True)
         
@@ -51,9 +52,10 @@ def obtener_totales_proyectos():
         # --- 3. Unión de Datos (Crear la tabla de entrenamiento) ---
         
         # Unir Hechos (Métricas) con Proyectos (Fechas/Dimensiones) usando 'idProyecto'
+        # Usamos HOW='left' para mantener todos los proyectos de la tabla de Hechos y luego rellenar NaNs
         df_master = pd.merge(df_hechos, df_proyectos[['idProyecto', 'Tiempo_Semanas']], on='idProyecto', how='left')
         
-        # Unir con el Total de Tareas calculado
+        # Unir con el Total de Tareas calculado (ahora debería coincidir por 'idProyecto')
         df_master = pd.merge(df_master, df_total_tareas, on='idProyecto', how='left')
         
         # Renombrar columnas para la regresión
@@ -67,7 +69,7 @@ def obtener_totales_proyectos():
         df_final = df_master[[
             'idProyecto', 'Tiempo_Semanas', 'Total_Defectos', 'Total_Tareas',
             'Costo_Defectos', 'Tareas_Automatizacion'
-        ]].fillna(0) # Sustituir NaNs resultantes por 0
+        ]].fillna(0) # Sustituir NaNs resultantes por 0 para que la regresión no falle
         
         # Convertir tipos para la regresión
         df_final[['Total_Defectos', 'Total_Tareas', 'Tareas_Automatizacion', 'Tiempo_Semanas']] = \
@@ -145,8 +147,15 @@ def hacer_prediccion(total_tareas_nuevo, automatizacion_tareas_nuevo, semanas_es
         'Total_Defectos', 'Total_Tareas', 'Tiempo_Semanas', 
         'Costo_Defectos', 'Tareas_Automatizacion'
     ]
-    corr_matrix = df_totales[variables_correlacion].corr()
     
+    # Solo calcular correlación si hay suficientes datos (más de 2 filas)
+    if len(df_totales) > 2:
+        corr_matrix = df_totales[variables_correlacion].corr()
+    else:
+        # Si no hay suficientes datos, la correlación no es significativa
+        corr_matrix = pd.DataFrame(index=variables_correlacion, columns=variables_correlacion).fillna(np.nan)
+
+
     print("\n" + "=" * 70)
     print("      CORRELACIÓN DE VARIABLES CON EL OBJETIVO (Total_Defectos)")
     print("=" * 70)
@@ -168,25 +177,28 @@ def hacer_prediccion(total_tareas_nuevo, automatizacion_tareas_nuevo, semanas_es
     X_FEATURES = ['Total_Tareas', 'Tareas_Automatizacion']
     X = df_totales[X_FEATURES].values
     
-    modelo_regresion = LinearRegression()
-    modelo_regresion.fit(X, y)
+    # Solo entrenar si hay más de 2 filas para evitar el sobreajuste 100%
+    if len(df_totales) <= 2:
+        # Asignar R2, RMSE y MAE como no aplicable o cero
+        r2, rmse, mae = 0.0, 0.0, 0.0
+        # Forzar una predicción simple si el modelo no puede entrenarse correctamente
+        total_defects_pred = np.mean(df_totales['Total_Defectos']) if len(df_totales) > 0 else 1 
+        print("ADVERTENCIA: Modelo entrenado con <= 2 registros. La predicción será la media simple.")
+    else:
+        modelo_regresion = LinearRegression()
+        modelo_regresion.fit(X, y)
     
-    # ----------------------------------------------------
-    # 2. EVALUACIÓN Y PREDICCIÓN
-    # ----------------------------------------------------
-    
-    # Evaluar el modelo final (en el set de entrenamiento)
-    y_pred = modelo_regresion.predict(X)
-    mae = mean_absolute_error(y, y_pred)
-    rmse = np.sqrt(mean_squared_error(y, y_pred))
-    r2 = r2_score(y, y_pred)
-    
-    # Usamos el valor REAL que viene del input del Streamlit
-    new_data_multiple = np.array([[total_tareas_nuevo, automatizacion_tareas_nuevo]])
+        # 2. EVALUACIÓN Y PREDICCIÓN
+        y_pred = modelo_regresion.predict(X)
+        mae = mean_absolute_error(y, y_pred)
+        rmse = np.sqrt(mean_squared_error(y, y_pred))
+        r2 = r2_score(y, y_pred)
+        
+        # Usamos el valor REAL que viene del input del Streamlit
+        new_data_multiple = np.array([[total_tareas_nuevo, automatizacion_tareas_nuevo]])
+        total_defects_pred = modelo_regresion.predict(new_data_multiple)[0]
 
-    # Predicción final
-    total_defects_pred = modelo_regresion.predict(new_data_multiple)[0]
-    total_defects_pred = np.maximum(1, total_defects_pred) 
+    total_defects_pred = np.maximum(1, total_defects_pred) # Asegura al menos 1 defecto
     
     print("\n" + "#" * 70)
     print("      EVALUACIÓN Y PREDICCIÓN DEL MODELO FINAL (MÚLTIPLE)")
@@ -208,7 +220,7 @@ def hacer_prediccion(total_tareas_nuevo, automatizacion_tareas_nuevo, semanas_es
         "R2": round(r2, 4),
         "RMSE": round(rmse, 2),
         "MAE": round(mae, 2),
-        "Coeficientes": modelo_regresion.coef_.tolist(),
+        "Coeficientes": modelo_regresion.coef_.tolist() if 'modelo_regresion' in locals() else [np.nan, np.nan],
     }
     
     resultado_modelo["Correlacion_Defectos"] = corr_matrix['Total_Defectos'].to_dict()
