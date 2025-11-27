@@ -4,4 +4,4 @@ numpy
 scikit-learn
 matplotlib
 seaborn
-mysql-connector-python
+plotly

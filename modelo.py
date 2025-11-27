@@ -1,84 +1,90 @@
 import pandas as pd
 import numpy as np
-import mysql.connector
+import os 
 from sklearn.linear_model import LinearRegression 
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-import matplotlib.pyplot as plt
-import seaborn as sns 
 import json
 import random
+import datetime # Necesario para calcular diferencias de fechas
+
+# Nombres de los archivos de datos que deben estar en el repositorio
+CSV_PROYECTOS = 'dw_proyectos.csv'
+CSV_HECHOS = 'dw_hechos_proyecto.csv'
+CSV_TAREAS = 'dw_tareas.csv'
+CSV_INCIDENTES = 'dw_incidentes.csv' # Incluido para evitar errores de referencia, aunque no se usa directamente en el modelo
 
 # =========================================================================
-# SECCIÓN 1: EXTRACCIÓN DE DATOS
+# SECCIÓN 1: EXTRACCIÓN DE DATOS (AHORA USA UNIONES DE CSV)
 # =========================================================================
 
 def obtener_totales_proyectos():
     """
-    Extrae los datos históricos necesarios para entrenar el Modelo 
-    Múltiple (Total_Tareas, Tareas_Automatizacion y Total_Defectos).
+    Extrae los datos históricos de múltiples CSV, realiza las uniones necesarias
+    y calcula las métricas Total_Tareas y Tiempo_Semanas usando Pandas.
     """
     try:
-        conn = mysql.connector.connect(
-            host="localhost",
-            user="root",
-            password="",
-            database="db_soporte"
-        )
-        cursor = conn.cursor(dictionary=True)
+        # --- Carga de todos los CSV ---
+        df_proyectos = pd.read_csv(CSV_PROYECTOS)
+        df_hechos = pd.read_csv(CSV_HECHOS)
+        df_tareas = pd.read_csv(CSV_TAREAS)
+        
+        # --- 1. Calcular Total_Tareas (Antes: PA contar_tareas) ---
+        # CORRECCIÓN: Usamos 'Proyecto_idProyecto' de dw_tareas.csv para agrupar
+        df_total_tareas = df_tareas.groupby('Proyecto_idProyecto').size().reset_index(name='Total_Tareas')
+        df_total_tareas.rename(columns={'Proyecto_idProyecto': 'idProyecto'}, inplace=True)
+        
+        # --- 2. Calcular Tiempo_Semanas (Antes: PA calcular_semanas_proyecto) ---
+        
+        # Convertir columnas de fecha a datetime
+        df_proyectos['fecha_inicio'] = pd.to_datetime(df_proyectos['fecha_inicio'])
+        df_proyectos['fecha_fin_real'] = pd.to_datetime(df_proyectos['fecha_fin_real'])
+        
+        # Si fecha_fin_real es NULL, usamos la fecha actual (simulada)
+        fecha_simulada_hoy = datetime.datetime.now() # Usamos la fecha actual de ejecución
+        df_proyectos['fecha_fin_calculo'] = df_proyectos['fecha_fin_real'].fillna(fecha_simulada_hoy)
+        
+        # Calcular la diferencia en días y convertir a semanas
+        df_proyectos['dias_duracion'] = (df_proyectos['fecha_fin_calculo'] - df_proyectos['fecha_inicio']).dt.days
+        # Usamos ceil para redondear hacia arriba como en el PA
+        df_proyectos['Tiempo_Semanas'] = (df_proyectos['dias_duracion'] / 7).apply(np.ceil).astype(int)
+        
+        # --- 3. Unión de Datos (Crear la tabla de entrenamiento) ---
+        
+        # Unir Hechos (Métricas) con Proyectos (Fechas/Dimensiones) usando 'idProyecto'
+        df_master = pd.merge(df_hechos, df_proyectos[['idProyecto', 'Tiempo_Semanas']], on='idProyecto', how='left')
+        
+        # Unir con el Total de Tareas calculado
+        df_master = pd.merge(df_master, df_total_tareas, on='idProyecto', how='left')
+        
+        # Renombrar columnas para la regresión
+        df_master.rename(columns={
+            'defectos_reportados': 'Total_Defectos',
+            'tareas_automatizacion_total': 'Tareas_Automatizacion',
+            'presupuesto': 'Costo_Defectos'
+        }, inplace=True)
+        
+        # Limpieza final y selección de columnas para el modelo (manteniendo solo las usadas)
+        df_final = df_master[[
+            'idProyecto', 'Tiempo_Semanas', 'Total_Defectos', 'Total_Tareas',
+            'Costo_Defectos', 'Tareas_Automatizacion'
+        ]].fillna(0) # Sustituir NaNs resultantes por 0
+        
+        # Convertir tipos para la regresión
+        df_final[['Total_Defectos', 'Total_Tareas', 'Tareas_Automatizacion', 'Tiempo_Semanas']] = \
+            df_final[['Total_Defectos', 'Total_Tareas', 'Tareas_Automatizacion', 'Tiempo_Semanas']].astype(int)
 
-        cursor.execute("""
-            SELECT 
-                p.idProyecto,
-                h.defectos_reportados,
-                h.tareas_automatizacion_total,
-                h.costo_defecto 
-            FROM hecho_proyecto h
-            JOIN dim_proyecto p ON h.idProyecto = p.idProyecto;
-        """)
-        proyectos_hechos = cursor.fetchall()
-        registros = []
+        print(f"Total de registros cargados para el entrenamiento desde CSV: {len(df_final)}")
+        print(df_final.head())
+        
+        return df_final
 
-        for proyecto in proyectos_hechos:
-            idp = proyecto["idProyecto"]
-            
-            # Total Tareas
-            cursor2 = conn.cursor() 
-            args_tareas = [idp, 0] 
-            resultado_tareas = cursor2.callproc("contar_tareas", args_tareas)
-            total_tareas = resultado_tareas[1]
-            cursor2.close()
-
-            # Tiempo (calcular_semanas_proyecto) - Requerido para la Curva Rayleigh
-            cursor2 = conn.cursor()
-            args_semanas = [idp, 0]
-            resultado_semanas = cursor2.callproc("calcular_semanas_proyecto", args_semanas)
-            semanas = resultado_semanas[1]
-            cursor2.close()
-
-            registros.append({
-                "idProyecto": idp,
-                "Tiempo_Semanas": semanas,
-                "Total_Defectos": proyecto["defectos_reportados"], 
-                "Total_Tareas": total_tareas, 
-                "Costo_Defectos": proyecto["costo_defecto"],
-                "Tareas_Automatizacion": proyecto["tareas_automatizacion_total"],
-                "Tareas_Reutilizadas": proyecto.get("tareas_reutilizadas_total", 0),
-                "Horas_Reales": proyecto.get("horas_reales_total", 0)
-            })
-
-        df = pd.DataFrame(registros).fillna(0) 
-        print(f"Total de registros cargados para el entrenamiento: {len(df)}")
-        print(df.head())
-        return df
-
-    except mysql.connector.Error as err:
-        print(f"Error de MySQL al obtener datos totales: {err}")
+    except FileNotFoundError:
+        print("Error: Asegúrate de que los archivos CSV (dw_proyectos.csv, dw_hechos_proyecto.csv, dw_tareas.csv) estén en la misma carpeta.")
         return pd.DataFrame()
         
-    finally:
-        if 'conn' in locals() and conn.is_connected():
-            cursor.close()
-            conn.close()
+    except Exception as err:
+        print(f"Error al procesar los archivos CSV: {err}")
+        return pd.DataFrame()
 
 # =========================================================================
 # SECCIÓN 2: MODELO RAYLEIGH (SOLO DISTRIBUCIÓN)
@@ -125,7 +131,6 @@ def ModeloRayleighDistribucion(total_defects, duration_weeks, historic_b=0.005):
 # SECCIÓN 3: API/SCRIPT ENDPOINT - MODELO FINAL (REGRESIÓN MÚLTIPLE)
 # =========================================================================
 
-# NOTA: La función ahora recibe Tareas_Automatizacion directamente
 def hacer_prediccion(total_tareas_nuevo, automatizacion_tareas_nuevo, semanas_estimadas_nuevo):
     
     print(f"Calculando predicción para proyecto nuevo (Tareas: {total_tareas_nuevo}, Automatización: {automatizacion_tareas_nuevo}, Semanas: {semanas_estimadas_nuevo})")
@@ -135,7 +140,7 @@ def hacer_prediccion(total_tareas_nuevo, automatizacion_tareas_nuevo, semanas_es
     if df_totales.empty:
         return json.dumps({"Error": "No se encontraron datos históricos para entrenar el modelo."}, indent=4)
 
-    # 1. ANÁLISIS DE CORRELACIÓN (Se mantiene la impresión para trazabilidad)
+    # 1. ANÁLISIS DE CORRELACIÓN
     variables_correlacion = [
         'Total_Defectos', 'Total_Tareas', 'Tiempo_Semanas', 
         'Costo_Defectos', 'Tareas_Automatizacion'
@@ -195,7 +200,7 @@ def hacer_prediccion(total_tareas_nuevo, automatizacion_tareas_nuevo, semanas_es
     # 3. DISTRIBUCIÓN RAYLEIGH (Curva de Riesgo)
     resultado_modelo = ModeloRayleighDistribucion(
         total_defects_pred, 
-        semanas_estimadas_nuevo # Semanas aún se usa aquí
+        semanas_estimadas_nuevo
     )
     
     # Añadir las métricas al JSON de salida
@@ -220,9 +225,9 @@ if __name__ == "__main__":
     NEW_PROJECT_TAG = "Nuevo_Proyecto_X" 
     
     # --- PARÁMETROS DEL NUEVO PROYECTO ---
-    NUEVAS_TAREAS_ESTIMADAS = 40
-    NUEVAS_TAREAS_AUTOMATIZACION = 20 
-    NUEVAS_SEMANAS_ESTIMADAS = 16
+    NUEVAS_TAREAS_ESTIMADAS = 35 
+    NUEVAS_TAREAS_AUTOMATIZACION = 10 
+    NUEVAS_SEMANAS_ESTIMADAS = 12
     
     print("=" * 70)
     print(f"       DEMOSTRACIÓN CLAVE: PROYECTO NUEVO ({NEW_PROJECT_TAG})")
@@ -231,7 +236,7 @@ if __name__ == "__main__":
     
     prediccion_json_str = hacer_prediccion(
         NUEVAS_TAREAS_ESTIMADAS,
-        NUEVAS_TAREAS_AUTOMATIZACION, # Pasar el nuevo valor
+        NUEVAS_TAREAS_AUTOMATIZACION,
         NUEVAS_SEMANAS_ESTIMADAS
     )
     
@@ -240,44 +245,3 @@ if __name__ == "__main__":
     print("      (Contiene la Predicción Total y la Curva de Riesgo)")
     print("=" * 70)
     print(prediccion_json_str)
-    
-    
-    # ----------------------------------------------------
-    # VISUALIZACIÓN DEL RIESGO
-    # ----------------------------------------------------
-    try:
-        resultado = json.loads(prediccion_json_str)
-        df_curva = pd.DataFrame(resultado.get('Curva_Riesgo_Rayleigh', []))
-        total_defectos = resultado.get('Total_Defectos_Estimados', 0)
-        
-        # --- GRÁFICA DE CORRELACIÓN ---
-        corr_data = resultado.get('Correlacion_Defectos', {})
-        corr_series = pd.Series(corr_data).drop('Total_Defectos').sort_values(ascending=False)
-        
-        plt.figure(figsize=(12, 6))
-        sns.barplot(x=corr_series.index, y=corr_series.values, palette="viridis")
-        plt.title('Correlación de Variables con Total_Defectos', fontsize=14)
-        plt.xlabel('Variable Predictora', fontsize=12)
-        plt.ylabel('Coeficiente de Correlación (r)', fontsize=12)
-        plt.ylim(-1, 1)
-        plt.xticks(rotation=45, ha='right')
-        plt.grid(axis='y', linestyle='--', alpha=0.6)
-        plt.tight_layout()
-        plt.show()
-
-        # Gráfico de distribución de riesgo (se mantiene)
-        if not df_curva.empty:
-            plt.figure(figsize=(10, 6))
-            plt.plot(df_curva['Semana'], df_curva['Defectos'], color='red', marker='o', linestyle='-', linewidth=2, label='Curva de Riesgo (Rayleigh)')
-            
-            plt.title(f'Riesgo de Defectos Semanal (Proyecto: {NEW_PROJECT_TAG})\nTotal Estimado: {total_defectos} defectos', fontsize=14)
-            plt.xlabel('Semana del Proyecto', fontsize=12)
-            plt.ylabel('Número de Defectos Esperados (Riesgo)', fontsize=12)
-            plt.xticks(df_curva['Semana'][::2]) 
-            plt.grid(axis='y', linestyle='--', alpha=0.6)
-            plt.legend()
-            plt.tight_layout()
-            plt.show()
-            
-    except Exception as e:
-        print(f"\nNo se pudo generar el gráfico para la demostración: {e}")

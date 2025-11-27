@@ -2,15 +2,17 @@ import streamlit as st
 import pandas as pd
 import json
 import numpy as np
-import matplotlib.pyplot as plt # Importación Simple
-import seaborn as sns          # Importación Simple
+# CAMBIO CLAVE: Usamos la librería base Plotly GO (más robusta)
+import plotly.graph_objects as go 
+import matplotlib.pyplot as plt 
+import seaborn as sns 
 
-# Importamos la función de predicción del modelo 
+# Importamos la función de predicción del modelo (Asegúrate que el nombre del archivo sea correcto)
 from modelo import hacer_prediccion 
 
 st.set_page_config(page_title="Predicción de Riesgo de Defectos", layout="wide")
 
-st.title("🛡️ Panel de Predicción de Riesgo de Defectos")
+st.title("Panel de Predicción de Riesgo de Defectos")
 
 # ---------------------------------------------------------
 # FORMULARIO (Estático y en la página principal)
@@ -54,7 +56,7 @@ if generar:
         prediccion_json_str = hacer_prediccion(tareas, automatizacion_input, semanas)
         
     except Exception as e:
-        st.error(f"Error al ejecutar el modelo o conectarse a la DB: {e}")
+        st.error(f"Error al ejecutar el modelo o conectarse a la DB/CSV: {e}")
         st.stop()
         
     # 2. Cargar y procesar JSON
@@ -68,10 +70,6 @@ if generar:
     except Exception:
         st.error("Error al procesar el JSON de salida del modelo. Revise la consola del script `modelo_produccion.py`.")
         st.stop()
-
-    
-    st.markdown("## Resultados y Trazabilidad") 
-
     # ---------------------------------------------------------
     # COLUMNA 1 (Superior Izquierda): KPIs y Métricas
     # ---------------------------------------------------------
@@ -93,32 +91,33 @@ if generar:
 
 
     # ---------------------------------------------------------
-    # COLUMNA 2 (Superior Derecha): Curva de Riesgo (Matplotlib)
+    # COLUMNA 2 (Superior Derecha): Curva de Riesgo (Plotly GO)
     # ---------------------------------------------------------
     with col2:
         st.markdown("### 3. Curva de Riesgo Semanal (Rayleigh)")
         
         if not df_curva.empty:
-            # Usando Matplotlib, que es más estable en entornos básicos
-            fig, ax = plt.subplots(figsize=(10, 5))
             
-            sns.lineplot(
-                x='Semana', 
-                y='Defectos', 
-                data=df_curva, 
-                marker='o', 
-                color='#FF4B4B', 
-                linewidth=3, 
-                ax=ax
+            # Usando Plotly.graph_objects (go) para la línea interactiva
+            fig = go.Figure(data=[
+                go.Scatter(
+                    x=df_curva['Semana'], 
+                    y=df_curva['Defectos'], 
+                    mode='lines+markers',
+                    name='Defectos Esperados',
+                    line=dict(color='#FF4B4B', width=3),
+                    marker=dict(size=8)
+                )
+            ])
+            
+            fig.update_layout(
+                title=f"Distribución de Riesgo de Defectos en {semanas} Semanas",
+                xaxis_title="Semana del Proyecto", 
+                yaxis_title="Defectos Esperados",
+                hovermode="x unified"
             )
             
-            ax.set_title(f"Distribución de Riesgo de Defectos en {semanas} Semanas", fontsize=14)
-            ax.set_xlabel("Semana del Proyecto", fontsize=12)
-            ax.set_ylabel("Defectos Esperados", fontsize=12)
-            ax.grid(axis='y', linestyle='--', alpha=0.7)
-            ax.set_xticks(df_curva['Semana'][::max(1, int(np.ceil(semanas/6)))]) 
-            
-            st.pyplot(fig)
+            st.plotly_chart(fig, use_container_width=True)
             
             max_defectos = df_curva['Defectos'].max()
             semanas_pico = df_curva[df_curva['Defectos'] == max_defectos]['Semana'].tolist()
@@ -139,7 +138,7 @@ if generar:
         st.caption("Estos valores sumados dan el Total de Defectos Estimados.")
         
     # ---------------------------------------------------------
-    # COLUMNA 4 (Inferior Derecha): Correlación
+    # COLUMNA 4 (Inferior Derecha): Correlación (AHORA ES TABLA SIMPLE)
     # ---------------------------------------------------------
     with col4:
         st.markdown("### 5. Trazabilidad: Correlación con Defectos")
@@ -148,25 +147,17 @@ if generar:
         df_corr = corr_series.reset_index()
         df_corr.columns = ['Variable', 'Correlación (r)']
         
-        # Usamos Matplotlib/Seaborn para la gráfica de barras de correlación
-        fig_corr, ax_corr = plt.subplots(figsize=(10, 5))
+        # Eliminar Total_Defectos y formatear
+        df_corr = df_corr[df_corr['Variable'] != 'Total_Defectos']
         
-        # Eliminar Total_Defectos (correlación 1.0)
-        corr_display = corr_series.drop('Total_Defectos').sort_values(ascending=False) 
+        # Formatear a 4 decimales y ordenar
+        df_corr['Correlación (r)'] = df_corr['Correlación (r)'].map('{:.4f}'.format)
+        df_corr = df_corr.sort_values(by='Correlación (r)', ascending=False)
         
-        sns.barplot(x=corr_display.index, y=corr_display.values, palette="viridis", ax=ax_corr)
-        ax_corr.set_title('Correlación de Variables con Total_Defectos', fontsize=14)
-        ax_corr.set_xlabel('Variable Predictora', fontsize=12)
-        ax_corr.set_ylabel('Coeficiente de Correlación (r)', fontsize=12)
-        ax_corr.set_ylim(-1, 1)
-        ax_corr.tick_params(axis='x', rotation=45)
-        ax_corr.grid(axis='y', linestyle='--', alpha=0.6)
-        plt.tight_layout()
-        
-        st.pyplot(fig_corr)
-        st.caption("Gráfico que muestra la relación lineal de cada variable con el número total de defectos.")
+        # Simplemente mostrar la tabla, sin estilos de color
+        st.dataframe(df_corr.set_index('Variable'), use_container_width=True)
+        st.caption("La Correlación (r) muestra la fuerza de la relación con el Total de Defectos.")
 
 
 # Pie de página descriptivo
 st.markdown("---")
-st.caption("Script de predicción ejecutado desde `modelo_produccion.py`.")
